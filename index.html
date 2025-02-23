@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+
+<body>
+    <div id="reader" style="width: 100%; height: 100vh; background: white; touch-action: none;"></div>
+</body>
+<style>
+    #html5-qrcode-button-camera-permission {
+        background-color: transparent;
+        border: 2px solid #000;
+        color: #000;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s, color 0.3s;
+    }
+
+    #html5-qrcode-button-camera-permission:hover {
+        background-color: #000;
+        color: #fff;
+    }
+
+    #html5-qrcode-anchor-scan-type-change {
+        display: none;
+    }
+</style>
+<script>
+    let tg = window.Telegram.WebApp;
+    tg.expand();
+    const studentsIds = new URLSearchParams(window.location.search).get("students_ids");
+</script>
+<script>
+    function onScanSuccess(decodedText, decodedResult) {
+        console.log(`Code matched = ${decodedText}`, decodedResult);
+        if (decodedText.includes('attendance-app.mirea.ru/selfapprove?token=')) {
+            const token = decodedText.split('=')[1];
+            tg.sendData(JSON.stringify({ token: token, students_ids: studentsIds }));
+            tg.close();
+        }
+    }
+
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader",
+        {
+            fps: 60, qrbox: { width: 250, height: 250 }, videoConstraints: {
+                facingMode: "environment",
+                zoom: 1
+            }, rememberLastUsedCamera: true,
+        },
+        /* verbose= */ false);
+
+    let initialDistance = null;
+    let zoom = 10;
+
+    // Функция для расчета расстояния между двумя касаниями
+    function getDistance(touch1, touch2) {
+        return Math.sqrt(Math.pow(touch2.pageX - touch1.pageX, 2) + Math.pow(touch2.pageY - touch1.pageY, 2));
+    }
+
+    // Обработчик для событий касания
+    document.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 2) {
+            initialDistance = getDistance(e.touches[0], e.touches[1]);
+        }
+    });
+
+    document.addEventListener('touchmove', function (e) {
+        if (e.touches.length === 2 && initialDistance) {
+            const newDistance = getDistance(e.touches[0], e.touches[1]);
+
+            // Если расстояние увеличилось, увеличиваем zoom
+            if (newDistance > initialDistance && zoom < 100) {
+                zoom = Math.min(100, zoom + 1); // Максимум zoom = 10
+            }
+            // Если расстояние уменьшилось, уменьшаем zoom
+            else if (newDistance < initialDistance && zoom > 10) {
+                zoom = Math.max(10, zoom - 1); // Минимум zoom = 1
+            }
+
+            // Применяем новое значение zoom
+            html5QrcodeScanner.applyVideoConstraints({ zoom: Math.round(zoom / 10) });
+
+            initialDistance = newDistance; // Обновляем начальное расстояние
+        }
+    });
+
+    html5QrcodeScanner.render(onScanSuccess);
+
+</script>
+</body>
+
+</html>
