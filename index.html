@@ -35,9 +35,9 @@
 <script>
     let tg = window.Telegram.WebApp;
     tg.expand();
-    const studentsIds = new URLSearchParams(window.location.search).get("students_ids");
-    const studentIds = studentsIds
-        ? studentsIds.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
+    const studentsIdsRaw = new URLSearchParams(window.location.search).get("students_ids");
+    const studentIds = studentsIdsRaw
+        ? studentsIdsRaw.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
         : [];
 </script>
 <script>
@@ -57,7 +57,7 @@
                 }),
             });
 
-            tg.sendData(JSON.stringify({ token: token, students_ids: studentsIds }));
+            tg.sendData(JSON.stringify({ token: token, students_ids: studentsIdsRaw }));
 
             try {
                 await attendanceRequest;
