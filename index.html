@@ -45,24 +45,30 @@
         console.log(`Code matched = ${decodedText}`, decodedResult);
         if (decodedText.includes('pulse.mirea.ru/lessons/visiting-logs/selfapprove?token=')) {
             const token = decodedText.split('=')[1];
-            const attendanceRequest = fetch('http://185.232.169.32/api/attendance/aprove', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    token: token,
-                    student_ids: studentIds,
-                    shuffle: true,
-                }),
-            });
-
-            tg.sendData(JSON.stringify({ token: token, students_ids: studentsIdsRaw }));
-
             try {
-                await attendanceRequest;
+                const response = await fetch('http://185.232.169.32/api/attendance/approve', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        student_ids: studentIds,
+                        shuffle: true,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Attendance API request failed with status ${response.status}`);
+                }
+
+                const responseData = await response.json();
+                const resultItems = Array.isArray(responseData?.items) ? responseData.items : [];
+
+                tg.sendData(JSON.stringify(resultItems));
             } catch (error) {
                 console.error('Failed to send attendance request', error);
+                tg.sendData(JSON.stringify([]));
             } finally {
                 tg.close();
             }
