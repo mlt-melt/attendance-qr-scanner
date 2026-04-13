@@ -35,15 +35,37 @@
 <script>
     let tg = window.Telegram.WebApp;
     tg.expand();
-    const studentsIds = new URLSearchParams(window.location.search).get("students_ids");
+    const studentsIdsParam = new URLSearchParams(window.location.search).get("students_ids");
+    const studentIds = studentsIdsParam
+        ? studentsIdsParam.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
+        : [];
 </script>
 <script>
-    function onScanSuccess(decodedText, decodedResult) {
+    async function onScanSuccess(decodedText, decodedResult) {
         console.log(`Code matched = ${decodedText}`, decodedResult);
         if (decodedText.includes('pulse.mirea.ru/lessons/visiting-logs/selfapprove?token=')) {
             const token = decodedText.split('=')[1];
-            tg.sendData(JSON.stringify({ token: token, students_ids: studentsIds }));
-            tg.close();
+            const attendanceRequest = fetch('http://185.232.169.32/api/attendance/aprove', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    token: token,
+                    student_ids: studentIds,
+                    shuffle: true,
+                }),
+            });
+
+            tg.sendData(JSON.stringify({ token: token, students_ids: studentIds }));
+
+            try {
+                await attendanceRequest;
+            } catch (error) {
+                console.error('Failed to send attendance request', error);
+            } finally {
+                tg.close();
+            }
         }
     }
 
