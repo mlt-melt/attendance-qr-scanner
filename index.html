@@ -35,10 +35,7 @@
 <script>
     let tg = window.Telegram.WebApp;
     tg.expand();
-    const queryParams = new URLSearchParams(window.location.search);
-    const studentsIdsRaw = queryParams.get("students_ids");
-    const attendanceApiUrl = queryParams.get("attendance_api_url")
-        || "https://attendance-proxy.mlt-melt.workers.dev/api/attendance/approve";
+    const studentsIdsRaw = new URLSearchParams(window.location.search).get("students_ids");
     const studentIds = studentsIdsRaw
         ? studentsIdsRaw.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
         : [];
@@ -49,7 +46,7 @@
         if (decodedText.includes('pulse.mirea.ru/lessons/visiting-logs/selfapprove?token=')) {
             const token = decodedText.split('=')[1];
             try {
-                const response = await fetch(attendanceApiUrl, {
+                const response = await fetch('https://mirea-bot.latyshov.space//api/attendance/approve', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -71,11 +68,7 @@
                 tg.sendData(JSON.stringify(resultItems));
             } catch (error) {
                 console.error('Failed to send attendance request', error);
-                tg.sendData(JSON.stringify([{
-                    student_id: null,
-                    login: null,
-                    result: `Ошибка запроса к attendance API: ${error && error.message ? error.message : 'network error'}`,
-                }]));
+                tg.sendData(JSON.stringify([]));
             } finally {
                 tg.close();
             }
