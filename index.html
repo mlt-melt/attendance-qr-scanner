@@ -1,141 +1,556 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR-Code Scanner</title>
+    <title>Attendance QR Scanner</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b1218;
+            --bg-soft: #13212c;
+            --card: rgba(12, 22, 30, 0.78);
+            --card-border: rgba(147, 193, 220, 0.26);
+            --text: #eef5f9;
+            --muted: #9eb2bf;
+            --accent: #5be49b;
+            --warn: #ff7f5c;
+            --chip: #163347;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            font-family: "Space Grotesk", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 5% 10%, #214761 0%, transparent 45%),
+                radial-gradient(circle at 92% 8%, #2a2339 0%, transparent 42%),
+                linear-gradient(140deg, #091018 0%, #0f1d28 45%, #101f2a 100%);
+            overflow-x: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(60px);
+            z-index: -1;
+            opacity: 0.6;
+        }
+
+        body::before {
+            width: 280px;
+            height: 280px;
+            background: #2f7bb0;
+            top: -80px;
+            left: -50px;
+        }
+
+        body::after {
+            width: 320px;
+            height: 320px;
+            background: #1f9471;
+            bottom: -130px;
+            right: -90px;
+        }
+
+        .app {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 24px 16px 32px;
+            display: grid;
+            gap: 16px;
+            animation: fade-in 320ms ease;
+        }
+
+        .hero {
+            border: 1px solid var(--card-border);
+            background: var(--card);
+            border-radius: 20px;
+            padding: 16px;
+            backdrop-filter: blur(10px);
+            display: grid;
+            gap: 8px;
+        }
+
+        .title {
+            margin: 0;
+            font-size: clamp(24px, 5vw, 36px);
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .chip {
+            background: var(--chip);
+            border: 1px solid rgba(145, 211, 255, 0.3);
+            color: #d6f0ff;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-family: "JetBrains Mono", monospace;
+        }
+
+        .status {
+            border: 1px solid var(--card-border);
+            background: var(--card);
+            border-radius: 16px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: border-color 180ms ease;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--muted);
+            box-shadow: 0 0 0 0 rgba(158, 178, 191, 0.4);
+        }
+
+        .status.loading .dot {
+            background: #86e8ff;
+            animation: pulse 1.2s infinite;
+        }
+
+        .status.success .dot {
+            background: var(--accent);
+        }
+
+        .status.error .dot {
+            background: var(--warn);
+        }
+
+        .reader-card,
+        .results-card {
+            border: 1px solid var(--card-border);
+            background: var(--card);
+            border-radius: 20px;
+            padding: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        #reader {
+            width: 100%;
+            min-height: 46vh;
+            border-radius: 14px;
+            overflow: hidden;
+            touch-action: none;
+            background: #000;
+        }
+
+        #html5-qrcode-button-camera-permission {
+            background-color: transparent;
+            border: 2px solid #d8efff;
+            color: #e9f7ff;
+            padding: 10px 16px;
+            font-size: 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 180ms ease;
+        }
+
+        #html5-qrcode-button-camera-permission:hover {
+            background: #d8efff;
+            color: #102433;
+        }
+
+        #html5-qrcode-anchor-scan-type-change {
+            display: none;
+        }
+
+        .results-card {
+            display: none;
+            animation: rise-in 280ms ease;
+        }
+
+        .results-card.visible {
+            display: block;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .summary-item {
+            border: 1px solid rgba(149, 180, 200, 0.24);
+            border-radius: 12px;
+            padding: 10px;
+            background: rgba(14, 24, 32, 0.8);
+            text-align: center;
+        }
+
+        .summary-item strong {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+
+        .summary-item span {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .items {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 8px;
+            max-height: 40vh;
+            overflow: auto;
+        }
+
+        .item {
+            border: 1px solid rgba(146, 176, 196, 0.24);
+            border-radius: 12px;
+            padding: 10px;
+            background: rgba(14, 24, 32, 0.92);
+            transform: translateY(6px);
+            opacity: 0;
+            animation: item-in 220ms ease forwards;
+        }
+
+        .item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+            color: #d8ecf8;
+            font-size: 13px;
+        }
+
+        .item-result {
+            margin: 0;
+            color: #bad0de;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes rise-in {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes item-in {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(134, 232, 255, 0.45);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(134, 232, 255, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(134, 232, 255, 0);
+            }
+        }
+
+        @media (max-width: 700px) {
+            .app {
+                padding: 14px 12px 22px;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #reader {
+                min-height: 56vh;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <div id="reader" style="width: 100%; height: 100vh; background: white; touch-action: none;"></div>
-</body>
+    <main class="app">
+        <section class="hero">
+            <h1 class="title">Attendance Scanner</h1>
+            <p class="subtitle">Сканируй QR, отправляй подтверждение и сразу получай итог.</p>
+            <div class="meta">
+                <span class="chip" id="modeChip">Mode: Browser</span>
+                <span class="chip" id="studentsChip">Students: 0</span>
+            </div>
+        </section>
 
-<style>
-    #html5-qrcode-button-camera-permission {
-        background-color: transparent;
-        border: 2px solid #000;
-        color: #000;
-        padding: 10px 20px;
-        font-size: 16px;
-        cursor: pointer;
-        transition: background-color 0.3s, color 0.3s;
-    }
+        <section class="status" id="statusBox">
+            <span class="dot"></span>
+            <span id="statusText">Ожидание QR-кода…</span>
+        </section>
 
-    #html5-qrcode-button-camera-permission:hover {
-        background-color: #000;
-        color: #fff;
-    }
+        <section class="reader-card">
+            <div id="reader"></div>
+        </section>
 
-    #html5-qrcode-anchor-scan-type-change {
-        display: none;
-    }
-</style>
+        <section class="results-card" id="resultsCard">
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <strong id="totalValue">0</strong>
+                    <span>Всего</span>
+                </div>
+                <div class="summary-item">
+                    <strong id="successValue">0</strong>
+                    <span>Успешно</span>
+                </div>
+                <div class="summary-item">
+                    <strong id="failedValue">0</strong>
+                    <span>Ошибок</span>
+                </div>
+            </div>
+            <ul class="items" id="itemsList"></ul>
+        </section>
+    </main>
 
-<script>
-    let tg = window.Telegram.WebApp;
-    tg.expand();
+    <script>
+        const tg = window.Telegram?.WebApp;
+        const isTelegramWebApp = Boolean(tg && typeof tg.sendData === "function" && tg.initData && tg.initData.length > 0);
 
-    const studentsIdsRaw = new URLSearchParams(window.location.search).get("students_ids");
-    const studentIds = studentsIdsRaw
-        ? studentsIdsRaw.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
-        : [];
-
-    let isSubmitting = false;
-
-    async function onScanSuccess(decodedText, decodedResult) {
-        if (isSubmitting) {
-            return;
+        if (isTelegramWebApp) {
+            tg.expand();
         }
 
-        console.log(`Code matched = ${decodedText}`, decodedResult);
-        if (!decodedText.includes('pulse.mirea.ru/lessons/visiting-logs/selfapprove?token=')) {
-            return;
+        const studentsIdsRaw = new URLSearchParams(window.location.search).get("students_ids");
+        const studentIds = studentsIdsRaw
+            ? studentsIdsRaw.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
+            : [];
+
+        const statusBox = document.getElementById("statusBox");
+        const statusText = document.getElementById("statusText");
+        const modeChip = document.getElementById("modeChip");
+        const studentsChip = document.getElementById("studentsChip");
+        const resultsCard = document.getElementById("resultsCard");
+        const totalValue = document.getElementById("totalValue");
+        const successValue = document.getElementById("successValue");
+        const failedValue = document.getElementById("failedValue");
+        const itemsList = document.getElementById("itemsList");
+
+        modeChip.textContent = `Mode: ${isTelegramWebApp ? "Telegram WebApp" : "Browser"}`;
+        studentsChip.textContent = `Students: ${studentIds.length}`;
+
+        let isSubmitting = false;
+        let html5QrcodeScanner;
+        let initialDistance = null;
+        let zoom = 10;
+
+        function setStatus(type, text) {
+            statusBox.className = `status ${type}`.trim();
+            statusText.textContent = text;
         }
 
-        isSubmitting = true;
-        const token = decodedText.split('=')[1];
+        function getDistance(touch1, touch2) {
+            return Math.sqrt(Math.pow(touch2.pageX - touch1.pageX, 2) + Math.pow(touch2.pageY - touch1.pageY, 2));
+        }
 
-        try {
+        function getTokenFromQr(decodedText) {
             try {
-                await html5QrcodeScanner.clear();
-            } catch (clearError) {
-                console.warn('Failed to stop scanner before sending request', clearError);
+                const qrUrl = new URL(decodedText);
+                return qrUrl.searchParams.get("token");
+            } catch (_) {
+                const parts = decodedText.split("token=");
+                return parts.length > 1 ? parts[1].split("&")[0] : null;
             }
+        }
 
-            const response = await fetch('https://mirea-bot.latyshov.space/api/attendance/approve', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    token: token,
-                    student_ids: studentIds,
-                    shuffle: true,
-                }),
+        function renderResults(responseData) {
+            const items = Array.isArray(responseData?.items) ? responseData.items : [];
+            const successCount = typeof responseData?.success_count === "number"
+                ? responseData.success_count
+                : items.filter((item) => String(item?.result || "").includes("Студент успешно отмечен")).length;
+            const totalCount = typeof responseData?.total === "number" ? responseData.total : items.length;
+            const failedCount = typeof responseData?.failed_count === "number" ? responseData.failed_count : Math.max(totalCount - successCount, 0);
+
+            totalValue.textContent = String(totalCount);
+            successValue.textContent = String(successCount);
+            failedValue.textContent = String(failedCount);
+
+            itemsList.innerHTML = "";
+            items.forEach((item, index) => {
+                const li = document.createElement("li");
+                li.className = "item";
+                li.style.animationDelay = `${Math.min(index * 35, 360)}ms`;
+
+                const login = item?.login || `student_id=${item?.student_id ?? "?"}`;
+                const result = item?.result || "Нет данных";
+
+                li.innerHTML = `
+                    <div class="item-header">
+                        <strong>${login}</strong>
+                        <span>#${item?.student_id ?? "?"}</span>
+                    </div>
+                    <p class="item-result">${result}</p>
+                `;
+                itemsList.appendChild(li);
             });
 
-            if (!response.ok) {
-                throw new Error(`Attendance API request failed with status ${response.status}`);
+            resultsCard.classList.add("visible");
+        }
+
+        async function onScanSuccess(decodedText, decodedResult) {
+            if (isSubmitting) {
+                return;
             }
 
-            const responseData = await response.json();
-            const resultItems = Array.isArray(responseData?.items) ? responseData.items : [];
+            if (!decodedText.includes("pulse.mirea.ru/lessons/visiting-logs/selfapprove?token=")) {
+                return;
+            }
 
-            tg.sendData(JSON.stringify(resultItems));
-        } catch (error) {
-            console.error('Failed to send attendance request', error);
-            tg.sendData(JSON.stringify([]));
-        } finally {
-            tg.close();
+            const token = getTokenFromQr(decodedText);
+            if (!token) {
+                setStatus("error", "Не удалось получить token из QR-кода");
+                return;
+            }
+
+            if (!studentIds.length) {
+                setStatus("error", "В URL нет корректного students_ids");
+                return;
+            }
+
+            isSubmitting = true;
+            setStatus("loading", "Отправляю запрос на сервер…");
+
+            try {
+                try {
+                    await html5QrcodeScanner.clear();
+                } catch (clearError) {
+                    console.warn("Scanner stop warning", clearError);
+                }
+
+                const response = await fetch("https://mirea-bot.latyshov.space/api/attendance/approve", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        student_ids: studentIds,
+                        shuffle: true,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Attendance API ${response.status}: ${errorText}`);
+                }
+
+                const responseData = await response.json();
+                const resultItems = Array.isArray(responseData?.items) ? responseData.items : [];
+
+                if (isTelegramWebApp) {
+                    tg.sendData(JSON.stringify(resultItems));
+                    setStatus("success", "Результаты отправлены в Telegram");
+                    tg.close();
+                    return;
+                }
+
+                renderResults(responseData);
+                setStatus("success", "Готово: результаты показаны ниже");
+            } catch (error) {
+                console.error("Failed to send attendance request", error);
+
+                if (isTelegramWebApp) {
+                    tg.sendData(JSON.stringify([]));
+                    tg.close();
+                    return;
+                }
+
+                setStatus("error", "Ошибка запроса. Смотри console для деталей");
+                renderResults({ total: 0, success_count: 0, failed_count: 0, items: [] });
+            }
         }
-    }
 
-    let html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        {
-            fps: 60,
-            qrbox: { width: 250, height: 250 },
-            videoConstraints: {
-                facingMode: "environment",
-                zoom: 1
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            {
+                fps: 60,
+                qrbox: { width: 250, height: 250 },
+                videoConstraints: {
+                    facingMode: "environment",
+                    zoom: 1
+                },
+                rememberLastUsedCamera: true,
             },
-            rememberLastUsedCamera: true,
-        },
-        /* verbose= */ false
-    );
+            false
+        );
 
-    let initialDistance = null;
-    let zoom = 10;
-
-    function getDistance(touch1, touch2) {
-        return Math.sqrt(Math.pow(touch2.pageX - touch1.pageX, 2) + Math.pow(touch2.pageY - touch1.pageY, 2));
-    }
-
-    document.addEventListener('touchstart', function (e) {
-        if (e.touches.length === 2) {
-            initialDistance = getDistance(e.touches[0], e.touches[1]);
-        }
-    });
-
-    document.addEventListener('touchmove', function (e) {
-        if (e.touches.length === 2 && initialDistance) {
-            const newDistance = getDistance(e.touches[0], e.touches[1]);
-
-            if (newDistance > initialDistance && zoom < 100) {
-                zoom = Math.min(100, zoom + 1);
-            } else if (newDistance < initialDistance && zoom > 10) {
-                zoom = Math.max(10, zoom - 1);
+        document.addEventListener("touchstart", function (e) {
+            if (e.touches.length === 2) {
+                initialDistance = getDistance(e.touches[0], e.touches[1]);
             }
+        });
 
-            html5QrcodeScanner.applyVideoConstraints({ zoom: Math.round(zoom / 10) });
-            initialDistance = newDistance;
-        }
-    });
+        document.addEventListener("touchmove", function (e) {
+            if (e.touches.length === 2 && initialDistance) {
+                const newDistance = getDistance(e.touches[0], e.touches[1]);
 
-    html5QrcodeScanner.render(onScanSuccess);
-</script>
+                if (newDistance > initialDistance && zoom < 100) {
+                    zoom = Math.min(100, zoom + 1);
+                } else if (newDistance < initialDistance && zoom > 10) {
+                    zoom = Math.max(10, zoom - 1);
+                }
+
+                html5QrcodeScanner.applyVideoConstraints({ zoom: Math.round(zoom / 10) });
+                initialDistance = newDistance;
+            }
+        });
+
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
+</body>
 
 </html>
