@@ -230,6 +230,15 @@
             overflow: auto;
         }
 
+        .results-mode .reader-card {
+            display: none;
+        }
+
+        .results-mode .items {
+            max-height: none;
+            overflow: visible;
+        }
+
         .item {
             border: 1px solid rgba(146, 176, 196, 0.24);
             border-radius: 12px;
@@ -359,7 +368,13 @@
 
     <script>
         const tg = window.Telegram?.WebApp;
-        const isTelegramWebApp = Boolean(tg && typeof tg.sendData === "function" && tg.initData && tg.initData.length > 0);
+        const hasTelegramBridge = Boolean(window.TelegramWebviewProxy || window.Telegram?.WebView);
+        const isTelegramWebApp = Boolean(
+            tg &&
+            typeof tg.sendData === "function" &&
+            typeof tg.close === "function" &&
+            (hasTelegramBridge || typeof tg.initData === "string" || typeof tg.initDataUnsafe === "object")
+        );
 
         if (isTelegramWebApp) {
             tg.expand();
@@ -375,6 +390,7 @@
         const modeChip = document.getElementById("modeChip");
         const studentsChip = document.getElementById("studentsChip");
         const resultsCard = document.getElementById("resultsCard");
+        const readerCard = document.querySelector(".reader-card");
         const totalValue = document.getElementById("totalValue");
         const successValue = document.getElementById("successValue");
         const failedValue = document.getElementById("failedValue");
@@ -439,6 +455,13 @@
             });
 
             resultsCard.classList.add("visible");
+
+            if (!isTelegramWebApp) {
+                document.body.classList.add("results-mode");
+                if (readerCard) {
+                    readerCard.style.display = "none";
+                }
+            }
         }
 
         async function onScanSuccess(decodedText, decodedResult) {
