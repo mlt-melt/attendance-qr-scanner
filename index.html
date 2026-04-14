@@ -333,7 +333,6 @@
             <h1 class="title">Attendance Scanner</h1>
             <p class="subtitle">Один QR - отметка для всех разом</p>
             <div class="meta">
-                <span class="chip" id="modeChip">Mode: Browser</span>
                 <span class="chip" id="studentsChip">Students: 0</span>
             </div>
         </section>
@@ -388,7 +387,6 @@
 
         const statusBox = document.getElementById("statusBox");
         const statusText = document.getElementById("statusText");
-        const modeChip = document.getElementById("modeChip");
         const studentsChip = document.getElementById("studentsChip");
         const resultsCard = document.getElementById("resultsCard");
         const readerCard = document.querySelector(".reader-card");
@@ -397,7 +395,6 @@
         const failedValue = document.getElementById("failedValue");
         const itemsList = document.getElementById("itemsList");
 
-        modeChip.textContent = `Mode: ${isTelegramWebApp ? "Telegram WebApp" : "Browser"}`;
         studentsChip.textContent = `Students: ${studentIds.length}`;
 
         let isSubmitting = false;
@@ -457,11 +454,9 @@
 
             resultsCard.classList.add("visible");
 
-            if (!isTelegramWebApp) {
-                document.body.classList.add("results-mode");
-                if (readerCard) {
-                    readerCard.style.display = "none";
-                }
+            document.body.classList.add("results-mode");
+            if (readerCard) {
+                readerCard.style.display = "none";
             }
         }
 
@@ -517,24 +512,27 @@
 
                 if (isTelegramWebApp) {
                     tg.sendData(JSON.stringify(resultItems));
-                    setStatus("success", "Результаты отправлены в Telegram");
-                    tg.close();
-                    return;
                 }
 
                 renderResults(responseData);
-                setStatus("success", "Готово: результаты показаны ниже");
+                setStatus("success", isTelegramWebApp ? "Результаты отправлены и показаны" : "Готово: результаты показаны ниже");
+
+                if (isTelegramWebApp) {
+                    tg.close();
+                }
             } catch (error) {
                 console.error("Failed to send attendance request", error);
 
                 if (isTelegramWebApp) {
                     tg.sendData(JSON.stringify([]));
-                    tg.close();
-                    return;
                 }
 
                 setStatus("error", "Ошибка запроса. Смотри console для деталей");
                 renderResults({ total: 0, success_count: 0, failed_count: 0, items: [] });
+
+                if (isTelegramWebApp) {
+                    tg.close();
+                }
             }
         }
 
