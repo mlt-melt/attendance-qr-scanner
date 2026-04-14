@@ -369,11 +369,12 @@
     <script>
         const tg = window.Telegram?.WebApp;
         const hasTelegramBridge = Boolean(window.TelegramWebviewProxy || window.Telegram?.WebView);
+        const hasInitData = Boolean(typeof tg?.initData === "string" && tg.initData.trim().length > 0);
         const isTelegramWebApp = Boolean(
             tg &&
             typeof tg.sendData === "function" &&
             typeof tg.close === "function" &&
-            (hasTelegramBridge || typeof tg.initData === "string" || typeof tg.initDataUnsafe === "object")
+            (hasInitData || hasTelegramBridge)
         );
 
         if (isTelegramWebApp) {
