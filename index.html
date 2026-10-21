@@ -392,13 +392,14 @@
         }
 
         const tg = window.Telegram?.WebApp;
-        const hasTelegramBridge = Boolean(window.TelegramWebviewProxy || window.Telegram?.WebView);
+        const hasTelegramBridge = Boolean(window.TelegramWebviewProxy || window.external?.notify);
         const hasInitData = Boolean(typeof tg?.initData === "string" && tg.initData.trim().length > 0);
+        const hasTelegramPlatform = Boolean(tg?.platform && tg.platform !== "unknown");
         const isTelegramWebApp = Boolean(
             tg &&
             typeof tg.sendData === "function" &&
             typeof tg.close === "function" &&
-            (hasInitData || hasTelegramBridge)
+            (hasInitData || hasTelegramBridge || hasTelegramPlatform)
         );
 
         if (isTelegramWebApp) {
@@ -448,6 +449,7 @@
         let botCheckPromise = null;
         let pulseCheckPromise = null;
         let readinessPromise = null;
+        let readinessChecked = false;
 
         function setStatus(type, text) {
             statusBox.className = `status ${type}`.trim();
@@ -507,6 +509,7 @@
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const data = await response.json();
                     renderReadiness(data.items || []);
+                    readinessChecked = true;
                 } catch (error) {
                     console.warn("Readiness check failed", error);
                     renderReadiness(studentIds.map((id) => ({ student_id: id, status: "unavailable" })));
@@ -601,6 +604,9 @@
         const botHealthTimer = setInterval(checkBotApi, botHealthIntervalMs);
         const pulseHealthTimer = setInterval(checkPulseApi, pulseHealthIntervalMs);
         const readinessTimer = setInterval(refreshReadiness, 60000);
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden && !isSubmitting) refreshReadiness();
+        });
         window.addEventListener("pagehide", () => {
             clearInterval(botHealthTimer);
             clearInterval(pulseHealthTimer);
@@ -665,6 +671,12 @@
                 return;
             }
 
+            if (!readinessChecked) {
+                setStatus("loading", "Проверяем сессии студентов...");
+                refreshReadiness();
+                return;
+            }
+
             const token = getTokenFromQr(decodedText);
             if (!token) {
                 setStatus("error", "Не удалось получить token из QR-кода");
@@ -680,15 +692,12 @@
             approvalPending = true;
             setStatus("loading", "Отправляю запрос на сервер...");
             setServiceStatus(botApiIndicator, botApiState, "checking", "отправка отметки...");
-            refreshConnectivity(true);
 
             let approvalTimeout;
             const approvalTimeoutMs = Math.max(45000, Math.ceil(studentIds.length / 6) * 15000 + 5000);
             let approvalResponseReceived = false;
             try {
                 await stopCamera();
-                await checkBotApi();
-
                 const approvalController = new AbortController();
                 approvalTimeout = setTimeout(() => approvalController.abort(), approvalTimeoutMs);
                 const response = await attendanceApi.request("/api/attendance/approve", {
@@ -701,7 +710,7 @@
                         token: token,
                         student_ids: studentIds,
                         shuffle: true,
-                        notify_success: !isTelegramWebApp,
+                        source: isTelegramWebApp ? "telegram_webapp" : "website",
                     }),
                 }, false);
                 approvalResponseReceived = true;
@@ -714,21 +723,21 @@
                 }
 
                 const responseData = await response.json();
-                const resultItems = Array.isArray(responseData?.items) ? responseData.items : [];
-
-                if (isTelegramWebApp) {
-                    tg.sendData(JSON.stringify(resultItems));
-                }
-
                 renderResults(responseData);
                 if (responseData.failed_count > 0) {
                     setStatus("error", `Отмечено ${responseData.success_count} из ${responseData.total}. Подробности ниже`);
                 } else {
-                    setStatus("success", isTelegramWebApp ? "Результаты отправлены и показаны" : "Готово: результаты показаны ниже");
+                    setStatus("success", "Готово: результаты показаны ниже");
                 }
 
                 if (isTelegramWebApp) {
-                    tg.close();
+                    try {
+                        tg.sendData(JSON.stringify({ procedure_id: responseData.procedure_id }));
+                        tg.close();
+                    } catch (bridgeError) {
+                        // Delivery is handled by the server even if Telegram's bridge fails.
+                        console.warn("Telegram result bridge unavailable", bridgeError);
+                    }
                 }
             } catch (error) {
                 approvalPending = false;
@@ -739,10 +748,6 @@
                     setServiceStatus(pulseApiIndicator, pulseApiState, "unknown", "не удалось проверить");
                 }
 
-                if (isTelegramWebApp) {
-                    tg.sendData(JSON.stringify([]));
-                }
-
                 const errorText = error?.name === "AbortError"
                     ? `Наш API не ответил за ${Math.round(approvalTimeoutMs / 1000)} секунд`
                     : approvalResponseReceived
@@ -751,9 +756,6 @@
                 setStatus("error", errorText);
                 renderResults({ total: 0, success_count: 0, failed_count: 0, items: [] });
 
-                if (isTelegramWebApp) {
-                    tg.close();
-                }
             } finally {
                 clearTimeout(approvalTimeout);
             }
