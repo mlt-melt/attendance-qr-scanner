@@ -326,6 +326,71 @@
     </main>
 
     <script>
+        class AttendanceApiTransport {
+            constructor() {
+                this.primaryUrl = "https://mirea-bot.latyshov.space";
+                this.proxyUrl = "https://d5d7f7eu6gjb27e8p1eg.d8epmcec.apigw.yandexcloud.net";
+                this.baseUrl = this.primaryUrl;
+                this.healthPromise = null;
+                this.hasChecked = false;
+            }
+
+            get isProxy() {
+                return this.baseUrl === this.proxyUrl;
+            }
+
+            async probe(baseUrl) {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 1500);
+                try {
+                    const response = await fetch(`${baseUrl}/health`, {
+                        cache: "no-store",
+                        signal: controller.signal,
+                    });
+                    // An HTTP error still means that this domain is reachable.
+                    if (!response.ok) return false;
+                    return (await response.json())?.status === "ok";
+                } finally {
+                    clearTimeout(timeout);
+                }
+            }
+
+            checkHealth() {
+                if (this.healthPromise) return this.healthPromise;
+                this.healthPromise = (async () => {
+                    try {
+                        const online = await this.probe(this.primaryUrl);
+                        this.baseUrl = this.primaryUrl;
+                        return online;
+                    } catch (_) {
+                        this.baseUrl = this.proxyUrl;
+                        try {
+                            return await this.probe(this.proxyUrl);
+                        } catch (_) {
+                            return false;
+                        }
+                    } finally {
+                        this.hasChecked = true;
+                    }
+                })().finally(() => { this.healthPromise = null; });
+                return this.healthPromise;
+            }
+
+            async request(path, options = {}, retry = true) {
+                if (!this.hasChecked) await this.checkHealth();
+                const baseUrl = this.baseUrl;
+                try {
+                    return await fetch(`${baseUrl}${path}`, options);
+                } catch (error) {
+                    // Caller cancellation must not resend a request, especially an approval.
+                    if (options.signal?.aborted) throw error;
+                    await this.checkHealth();
+                    if (!retry || this.baseUrl === baseUrl) throw error;
+                    return await fetch(`${this.baseUrl}${path}`, options);
+                }
+            }
+        }
+
         const tg = window.Telegram?.WebApp;
         const hasTelegramBridge = Boolean(window.TelegramWebviewProxy || window.Telegram?.WebView);
         const hasInitData = Boolean(typeof tg?.initData === "string" && tg.initData.trim().length > 0);
@@ -344,7 +409,7 @@
         const studentIds = studentsIdsRaw
             ? studentsIdsRaw.split(",").map((id) => Number(id.trim())).filter((id) => Number.isFinite(id))
             : [];
-        const apiBaseUrl = "https://mirea-bot.latyshov.space";
+        const attendanceApi = new AttendanceApiTransport();
         const botHealthIntervalMs = 2000;
         const pulseHealthIntervalMs = 10000;
 
@@ -427,11 +492,12 @@
                 return Promise.resolve();
             }
             readinessPromise = (async () => {
+                if (!attendanceApi.hasChecked) await attendanceApi.checkHealth();
                 const controller = new AbortController();
                 const timeoutMs = Math.max(15000, Math.ceil(studentIds.length / 6) * 9000 + 3000);
                 const timeout = setTimeout(() => controller.abort(), timeoutMs);
                 try {
-                    const response = await fetch(`${apiBaseUrl}/api/attendance/readiness`, {
+                    const response = await attendanceApi.request("/api/attendance/readiness", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ student_ids: studentIds }),
@@ -460,10 +526,11 @@
         }
 
         async function fetchHealth(path, timeoutMs) {
+            if (!attendanceApi.hasChecked) await attendanceApi.checkHealth();
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutMs);
             try {
-                const response = await fetch(`${apiBaseUrl}${path}`, {
+                const response = await attendanceApi.request(path, {
                     cache: "no-store",
                     signal: controller.signal,
                 });
@@ -481,21 +548,21 @@
                 return botCheckPromise;
             }
             botCheckPromise = (async () => {
-                let botOnline = false;
-                try {
-                    botOnline = (await fetchHealth("/health", 1500))?.status === "ok";
-                } catch (_) {
-                    // The indicator below shows a network error or timeout.
-                }
+                const botOnline = await attendanceApi.checkHealth();
+                botApiIndicator.title = attendanceApi.isProxy ? "Соединение через HTTP-прокси" : "Прямое соединение";
                 setServiceStatus(
                     botApiIndicator, botApiState,
                     botOnline ? (approvalPending ? "checking" : "online") : "offline",
-                    botOnline ? (approvalPending ? "отметка выполняется..." : "в сети") : "не отвечает"
+                    botOnline ? (approvalPending ? "отметка выполняется..." : botOnlineLabel()) : "не отвечает"
                 );
             })().finally(() => {
                 botCheckPromise = null;
             });
             return botCheckPromise;
+        }
+
+        function botOnlineLabel() {
+            return attendanceApi.isProxy ? "в сети · прокси" : "в сети";
         }
 
         function checkPulseApi(force = false) {
@@ -620,10 +687,11 @@
             let approvalResponseReceived = false;
             try {
                 await stopCamera();
+                await checkBotApi();
 
                 const approvalController = new AbortController();
                 approvalTimeout = setTimeout(() => approvalController.abort(), approvalTimeoutMs);
-                const response = await fetch(`${apiBaseUrl}/api/attendance/approve`, {
+                const response = await attendanceApi.request("/api/attendance/approve", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -635,10 +703,10 @@
                         shuffle: true,
                         notify_success: !isTelegramWebApp,
                     }),
-                });
+                }, false);
                 approvalResponseReceived = true;
                 approvalPending = false;
-                setServiceStatus(botApiIndicator, botApiState, "online", "в сети");
+                setServiceStatus(botApiIndicator, botApiState, "online", botOnlineLabel());
 
                 if (!response.ok) {
                     const errorText = await response.text();
